@@ -182,5 +182,78 @@ module.exports = {
                 finish(config.source + 'doesn\'t exists');
             }
         });
+    },
+
+    link: function (config, log, done) {
+        let level = 0,
+            directories = 0,
+            files = 0;
+
+        function finish(error, callback) {
+            if (error) {
+                log.fail(error.toString());
+            } else {
+                log.info(
+                    'copy %s to %s (directories: %s, files: %s)',
+                    log.colors.bold(config.source),
+                    log.colors.bold(config.target),
+                    log.colors.bold(directories),
+                    log.colors.bold(files)
+                );
+            }
+
+            done(error);
+        }
+
+        function link(source, target, callback) {
+            level++;
+
+            fs.mkdir(target, function (error) {
+                if (error && error.code !== 'EEXIST') {
+                    finish(error, callback);
+                } else {
+                    if (!error) {
+                        directories++;
+                    }
+
+                    fs.readdir(source, function (error, list) {
+                        // check exist source
+                        if (error) {
+                            finish(error, callback);
+                        } else if (list.length) {
+                            // handle every list item by its type
+                            list.forEach(function (item) {
+                                const
+                                    sourceItem = path.join(source, item),
+                                    targetItem = path.join(target, item),
+                                    sourceStat = fs.statSync(sourceItem);
+
+                                if (sourceStat.isDirectory()) {
+                                    // call copy using new sources
+                                    link(sourceItem, targetItem, callback);
+                                } else if ( !fs.existsSync(targetItem) ) {
+                                    fs.symlinkSync(sourceItem, targetItem);
+                                    files++;
+                                }
+                            });
+
+                            level--;
+
+                            if (level === 0) {
+                                finish(null, callback);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        fs.exists(config.source, function (exists) {
+            if (exists) {
+                link(config.source, config.target, done);
+            } else {
+                finish(config.source + 'doesn\'t exists');
+            }
+        });
     }
 };
